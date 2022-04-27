@@ -2,10 +2,11 @@ import sys
 import os
 import shutil
 import tqdm
+import datetime
 import math
 
-source = "G:\Samples"
-dest = "H:\Programs\G\Samples"
+source = "G:"
+dest = "H:\Programs\G"
 
 source_res = [os.path.join(dp, f) for dp, dn, filenames in os.walk(source) for f in filenames]
 
@@ -21,6 +22,10 @@ for i in tqdm.tqdm(range(len(source_res))):
     if os.path.exists(source_res[i].replace(source, dest)):
         if os.path.getsize(source_res[i]) == os.path.getsize(source_res[i].replace(source, dest)):
             skip_count += 1
+            print(
+                f"{datetime.datetime.now().strftime('%H:%M:%S')} : skipping {skip_count}/{len(source_res)}: {source_res[i]}"
+            )
+            pbar.update(math.floor(os.path.getsize(source_res[i]) / 1000000))
             continue
         else:
             os.remove(source_res[i].replace(source, dest))
@@ -35,3 +40,16 @@ pbar.close()
 print("")
 print("")
 print(f"Done  skipped {skip_count}/{len(source_res)} files")
+
+bad_coppied = []
+for i in tqdm.tqdm(range(len(source_res))):
+    if os.path.exists(source_res[i].replace(source, dest)):
+        if os.path.getsize(source_res[i]) == os.path.getsize(source_res[i].replace(source, dest)):
+            bad_coppied.append(source_res[i])
+
+print(bad_coppied)
+with open("log.txt", "w") as file:
+    for item in bad_coppied:
+        file.write(item + "\n")
+if bad_coppied:
+    print("RERUN TOOL, THE COPY DOESNT MATCH THE SOURCE!!!")
