@@ -1,7 +1,6 @@
 import sys
 import os
 import shutil
-from numpy import size
 import tqdm
 import math
 
@@ -23,18 +22,20 @@ def main():
         ]
 
         processed = []
-        if os.exists("processed.txt"):
-            with open("proccessed.txt") as f:
-                processed = f.readlines()
-
-        print(len(result))
+        if os.path.exists("processed.txt"):
+            with open("processed.txt") as file:
+                for x in file.readlines():
+                    processed.append(x.strip())
 
         # detecting total size (for first bar)
+
+        orig_proc = len(processed)
         size_total = 0
         for i in tqdm.tqdm(range(len(result))):
             size_total += os.path.getsize(result[i])
 
         pbar = tqdm.tqdm(total=math.floor(size_total / 1000000))
+
         for i in tqdm.tqdm(range(len(result))):
             if result[i] not in processed:
                 size_before = os.path.getsize(result[i])
@@ -56,14 +57,14 @@ def main():
                     processed.append(result[i])
 
         pbar.close()
-        print("DONE")
-        with open("processed.txt", "w") as f:
+        print("DONE  " + str(orig_proc) + "/" + str(len(result)) + " files skipped")
+        with open("processed.txt", "w") as file:
             for item in processed:
-                f.write(item)
+                file.write(item + "\n")
     finally:
-        with open("processed.txt", "w") as f:
+        with open("processed.txt", "w") as file:
             for item in processed:
-                f.write(item)
+                file.write(item + "\n")
 
 
 if __name__ == "__main__":
