@@ -5,7 +5,7 @@ import tqdm
 import math
 
 # the root path it should  work through
-the_path = "G:\Samples\Cymatics"
+the_path = "G:\Samples\Loops"
 
 
 # change this if the extenion could intefer (not sure why tho)
