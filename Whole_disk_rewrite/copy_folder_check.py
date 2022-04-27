@@ -14,9 +14,6 @@ for i in tqdm.tqdm(range(len(source_res))):
     size_total += os.path.getsize(source_res[i])
 pbar = tqdm.tqdm(total=math.floor(size_total / 1000000))
 
-print(source_res[0])
-print(source_res[0].replace(source, dest))
-
 skip_count = 0
 
 for i in tqdm.tqdm(range(len(source_res))):
