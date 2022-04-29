@@ -6,7 +6,7 @@ import datetime
 import math
 
 source = "G:"
-dest = "H:\Programs\G"
+dest = "H:\Programs\G\\"
 
 source_res = [os.path.join(dp, f) for dp, dn, filenames in os.walk(source) for f in filenames]
 
