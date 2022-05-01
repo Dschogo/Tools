@@ -1,0 +1,7 @@
+[
+    {
+        "name": "chrome",
+        "name_mode": "ends_with",
+        "exe": "chrome.exe"
+    }
+]
