@@ -162,8 +162,10 @@
             <h3>Video Mapper Controls</h3>
 
             <div class="control-group">
-                <label for="videoFile">Add Video:</label>
-                <input type="file" id="videoFile" accept="video/*" />
+                <!-- <label for="videoFile">Add Video/Image:</label>
+                <input type="file" id="videoFile" accept="video/*,image/*" multiple /> -->
+                <button onclick="addFile()">Add Video/Image</button>
+
                 <div class="video-list" id="videoList">
                     <div style="padding: 8px; text-align: center; color: #888; font-style: italic">No videos loaded</div>
                 </div>
@@ -189,6 +191,7 @@
             • Press 'C' or click "Toggle Calibration" to show corner handles<br />
             • Only the selected video shows corner handles<br />
             • Drag the corner handles to position and reshape the video<br />
+            • Use mouse wheel or +/- keys to scale selected video around its center<br />
             • Press 'M' to mute, 'H' to hide, 'K' for kiosk mode<br />
             • Press 'W/S' to reorder selected video<br />
             • Press 'F' for fullscreen, 'R' to reset mapping

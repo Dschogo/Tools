@@ -26,15 +26,11 @@ let kioskMode = false; // Toggle for hiding UI
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
 
-    // Create projection mapper
     pMapper = createProjectionMapper(this);
 
     // Start calibration mode by default so user can see the handles
     pMapper.startCalibration();
     isCalibrating = true;
-
-    // Set up video file input event listener
-    setupVideoFileInput();
 
     console.log("Multi-Video Mapper initialized. Add video files to begin.");
 }
@@ -64,48 +60,70 @@ function draw() {
     }
 
     for (let i = 0; i < videos.length; i++) {
-        const videoObj = videos[i];
-        if (videoObj.video && videoObj.quadMap && !videoObj.isHidden) {
-            videoObj.quadMap.displayTexture(videoObj.video);
-            videoObj.quadMap.calculateMesh();
+        const obj = videos[i];
+        if (obj.quadMap && !obj.isHidden) {
+            if (obj.isImage && obj.image) {
+                obj.quadMap.displayTexture(obj.image);
+            } else if (obj.video) {
+                obj.quadMap.displayTexture(obj.video);
+            }
+            obj.quadMap.calculateMesh();
         }
     }
-    
-    // Display control points only for the selected video to solve z-order issues
+    // Display control points only for the selected item
     if (isCalibrating && selectedVideoIndex >= 0 && videos[selectedVideoIndex] && !videos[selectedVideoIndex].isHidden) {
-        const selectedVideo = videos[selectedVideoIndex];
-
-        // Set the color for the control points
-        if (selectedVideo.color) {
-            selectedVideo.quadMap.controlPointColor = selectedVideo.color;
+        const selectedObj = videos[selectedVideoIndex];
+        if (selectedObj.color) {
+            selectedObj.quadMap.controlPointColor = selectedObj.color;
         }
-
-        selectedVideo.quadMap.displayControlPoints();
-
-
+        selectedObj.quadMap.displayControlPoints();
     }
     // hide all other controlpoints
     for (let i = 0; i < videos.length; i++) {
-        const videoObj = videos[i];
-        if (videoObj.quadMap && i !== selectedVideoIndex) {
-            // Hide control points for non-selected videos
-            videoObj.quadMap.controlPointColor = color(0, 0, 0, 0); // Transparent color
+        const obj = videos[i];
+        if (obj.quadMap && i !== selectedVideoIndex) {
+            obj.quadMap.controlPointColor = color(0, 0, 0, 0);
         }
     }
 }
 
-function setupVideoFileInput() {
-    const fileInput = document.getElementById("videoFile");
-    fileInput.addEventListener("change", function (event) {
-        const file = event.target.files[0];
-        if (file) {
-            addVideoFile(file);
-            // Clear the input so the same file can be added again if needed
-            fileInput.value = "";
+// Add image file support
+function addImageFile(file) {
+    const imageId = Date.now() + Math.random();
+    const url = URL.createObjectURL(file);
+    loadImage(
+        url,
+        (img) => {
+            // Generate a random color for this image's grid/corner points
+            const imageColor = color(random(100, 255), random(100, 255), random(100, 255));
+            const imageObj = {
+                id: imageId,
+                name: file.name,
+                image: img,
+                quadMap: null,
+                isImage: true,
+                url: url,
+                isHidden: false,
+                color: imageColor,
+            };
+            videos.push(imageObj);
+            const imageIndex = videos.length - 1;
+            // Create quad map for this image
+            imageObj.quadMap = pMapper.createQuadMap(img.width, img.height);
+            imageObj.quadMap.controlPointColor = imageObj.color;
+            setTimeout(() => {
+                resetQuadPosition(imageObj.quadMap, img);
+                selectVideo(imageIndex);
+                updateVideoListUI();
+                console.log("Image ready! Use controls to map.");
+            }, 100);
+        },
+        (err) => {
+            alert("Error loading image file. Please try a different format.");
+            URL.revokeObjectURL(url);
         }
-    });
+    );
 }
-
 function addVideoFile(file) {
     // Create unique ID for this video
     const videoId = Date.now() + Math.random();
@@ -165,7 +183,7 @@ function addVideoFile(file) {
             updateVideoListUI();
 
             console.log("Video ready! Click to play or use controls.");
-        }, 100); // Small delay to ensure proper initialization
+        }, 10); // Small delay to ensure proper initialization
     });
 
     video.elt.addEventListener("error", function (e) {
@@ -306,46 +324,44 @@ function deleteVideo(index) {
 
 function updateVideoListUI() {
     const videoList = document.getElementById("videoList");
-
     if (videos.length === 0) {
-        videoList.innerHTML = '<div style="padding: 8px; text-align: center; color: #888; font-style: italic;">No videos loaded</div>';
+        videoList.innerHTML = '<div style="padding: 8px; text-align: center; color: #888; font-style: italic;">No videos or images loaded</div>';
         return;
     }
-
     let html = "";
-    videos.forEach((videoObj, index) => {
+    videos.forEach((obj, index) => {
         const isSelected = index === selectedVideoIndex;
-        let status = "Paused";
-        if (videoObj.isPlaying) status = "Playing";
-        if (videoObj.isHidden) status = "Hidden";
-        if (videoObj.isMuted && !videoObj.isHidden) status += " (Muted)";
-
+        let status = obj.isImage ? "Image" : "Paused";
+        if (!obj.isImage) {
+            if (obj.isPlaying) status = "Playing";
+            if (obj.isHidden) status = "Hidden";
+            if (obj.isMuted && !obj.isHidden) status += " (Muted)";
+        } else {
+            if (obj.isHidden) status = "Hidden";
+        }
         // Get the color as RGB values for CSS
-        const r = red(videoObj.color);
-        const g = green(videoObj.color);
-        const b = blue(videoObj.color);
+        const r = red(obj.color);
+        const g = green(obj.color);
+        const b = blue(obj.color);
         const colorStyle = `rgb(${r}, ${g}, ${b})`;
-
-        const opacity = videoObj.isHidden ? "0.5" : "1";
-
+        const opacity = obj.isHidden ? "0.5" : "1";
         html += `
             <div class="video-item ${isSelected ? "selected" : ""}" onclick="selectVideoFromUI(${index})" style="opacity: ${opacity}">
                 <div class="video-color-indicator" style="background-color: ${colorStyle}; width: 12px; height: 12px; border-radius: 2px; margin-right: 8px; flex-shrink: 0;"></div>
-                <div class="video-item-name" title="${videoObj.name}">
-                    ${videoObj.name} (${status})
+                <div class="video-item-name" title="${obj.name}">
+                    ${obj.name} (${status})
                 </div>
                 <div class="video-item-controls">
                     <button onclick="event.stopPropagation(); moveVideoUpFromUI(${index})" ${index === 0 ? "disabled" : ""} title="Move to foreground">↑</button>
                     <button onclick="event.stopPropagation(); moveVideoDownFromUI(${index})" ${index === videos.length - 1 ? "disabled" : ""} title="Move to background">↓</button>
-                    <button onclick="event.stopPropagation(); toggleVideoPlayback(${index})" ${videoObj.isHidden ? "disabled" : ""}>${videoObj.isPlaying ? "⏸" : "▶"}</button>
-                    <button onclick="event.stopPropagation(); muteVideoFromUI(${index})" title="${videoObj.isMuted ? "Unmute" : "Mute"}">${videoObj.isMuted ? "🔇" : "🔊"}</button>
-                    <button onclick="event.stopPropagation(); hideVideoFromUI(${index})" title="${videoObj.isHidden ? "Show" : "Hide"}">${videoObj.isHidden ? "👁" : "🙈"}</button>
+                    ${!obj.isImage ? `<button onclick=\"event.stopPropagation(); toggleVideoPlayback(${index})\" ${obj.isHidden ? "disabled" : ""}>${obj.isPlaying ? "⏸" : "▶"}</button>` : ""}
+                    ${!obj.isImage ? `<button onclick=\"event.stopPropagation(); muteVideoFromUI(${index})\" title=\"${obj.isMuted ? "Unmute" : "Mute"}\">${obj.isMuted ? "🔇" : "🔊"}</button>` : ""}
+                    <button onclick="event.stopPropagation(); hideVideoFromUI(${index})" title="${obj.isHidden ? "Show" : "Hide"}">${obj.isHidden ? "👁" : "🙈"}</button>
                     <button class="delete" onclick="event.stopPropagation(); deleteVideoFromUI(${index})">×</button>
                 </div>
             </div>
         `;
     });
-
     videoList.innerHTML = html;
 }
 
@@ -385,7 +401,6 @@ function resetQuadPosition(quadMap, video) {
     const top = -quadHeight / 2 + offset;
     const bottom = quadHeight / 2 + offset;
 
-    console.log(quadMap);
     // Set the four corners of the quad with explicit coordinate assignment
     if (quadMap.controlPoints && quadMap.controlPoints.length >= 4) {
         // Ensure anchors exist and are properly initialized
@@ -404,8 +419,6 @@ function resetQuadPosition(quadMap, video) {
         quadMap.controlPoints[2].y = bottom;
         quadMap.controlPoints[3].x = left; // Bottom-left
         quadMap.controlPoints[3].y = bottom;
-
-        //console.log(`Reset quad ${videoIndex}: ${quadWidth.toFixed(0)}x${quadHeight.toFixed(0)} at (${left.toFixed(0)},${top.toFixed(0)}) scale=${scale.toFixed(3)}`);
     } else {
         console.error("QuadMap anchors not properly initialized");
     }
@@ -459,6 +472,56 @@ function toggleFullscreen() {
     fullscreen(!fs);
 }
 
+// Function to scale selected quad around its center
+function scaleSelectedQuad(scaleFactor) {
+    if (selectedVideoIndex < 0 || !videos[selectedVideoIndex] || !videos[selectedVideoIndex].quadMap) {
+        return;
+    }
+
+    const quadMap = videos[selectedVideoIndex].quadMap;
+    const controlPoints = quadMap.controlPoints;
+
+    if (!controlPoints || controlPoints.length < 4) {
+        return;
+    }
+
+    // Calculate the center of the quad
+    let centerX = 0;
+    let centerY = 0;
+    for (let i = 0; i < 4; i++) {
+        centerX += controlPoints[i].x;
+        centerY += controlPoints[i].y;
+    }
+    centerX /= 4;
+    centerY /= 4;
+
+    // Scale each corner point around the center
+    for (let i = 0; i < 4; i++) {
+        const deltaX = controlPoints[i].x - centerX;
+        const deltaY = controlPoints[i].y - centerY;
+
+        controlPoints[i].x = centerX + deltaX * scaleFactor;
+        controlPoints[i].y = centerY + deltaY * scaleFactor;
+    }
+
+    console.log(`Scaled selected quad by factor: ${scaleFactor.toFixed(2)}`);
+}
+
+// Mouse wheel event for scaling
+function mouseWheel(event) {
+    if (selectedVideoIndex >= 0 && videos[selectedVideoIndex] && isCalibrating) {
+        // Prevent page scrolling
+        event.preventDefault();
+
+        // Determine scale factor based on wheel direction
+        const scaleFactor = event.delta > 0 ? 0.95 : 1.05; // Smaller increment for smoother scaling
+
+        scaleSelectedQuad(scaleFactor);
+
+        return false; // Prevent default behavior
+    }
+}
+
 // Keyboard controls
 function keyPressed() {
     switch (key.toLowerCase()) {
@@ -498,6 +561,18 @@ function keyPressed() {
         case "s": // Move selected video down (background)
             if (selectedVideoIndex < videos.length - 1) {
                 moveVideoDown(selectedVideoIndex);
+            }
+            break;
+        case "+":
+        case "=": // Scale up selected quad
+            if (selectedVideoIndex >= 0 && videos[selectedVideoIndex]) {
+                scaleSelectedQuad(1.1);
+            }
+            break;
+        case "-":
+        case "_": // Scale down selected quad
+            if (selectedVideoIndex >= 0 && videos[selectedVideoIndex]) {
+                scaleSelectedQuad(0.9);
             }
             break;
     }
@@ -548,3 +623,46 @@ window.hideVideoFromUI = hideVideo;
 window.moveVideoUpFromUI = moveVideoUp;
 window.moveVideoDownFromUI = moveVideoDown;
 window.toggleKioskMode = toggleKioskMode;
+window.addFile = function () {
+    // open file input dialog for video/image files
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "video/*,image/*";
+    fileInput.multiple = true; // Allow multiple files
+    fileInput.onchange = function (event) {
+        const files = event.target.files;
+        if (files.length === 0) return;
+
+        for (const file of files) {
+            if (file.type.startsWith("video/")) {
+                addVideoFile(file);
+            } else if (file.type.startsWith("image/")) {
+                addImageFile(file);
+            } else {
+                alert("Unsupported file type. Please select a video or image file.");
+            }
+            console.log(`Added file: ${file.name}`);
+        }
+    };
+
+    fileInput.click();
+};
+
+// function setupVideoFileInput() {
+//     const fileInput = document.getElementById("videoFile");
+//     fileInput.setAttribute("accept", "video/*,image/*"); // Accept both video and image
+//     fileInput.addEventListener("change", function (event) {
+//         const file = event.target.files[0];
+//         if (file) {
+//             if (file.type.startsWith("video/")) {
+//                 addVideoFile(file);
+//             } else if (file.type.startsWith("image/")) {
+//                 addImageFile(file);
+//             } else {
+//                 alert("Unsupported file type. Please select a video or image file.");
+//             }
+//             // Clear the input so the same file can be added again if needed
+//             fileInput.value = "";
+//         }
+//     });
+// }
