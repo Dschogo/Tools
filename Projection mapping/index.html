@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+        <script src="https://cdn.statically.io/gh/jdeboi/p5.mapper/main/dist/p5.mapper.min.js"></script>
+        <style>
+            body {
+                margin: 0;
+                font-family: Arial, sans-serif;
+                background: #000;
+                color: white;
+                overflow: hidden; /* Hide scrollbars */
+            }
+
+            .controls {
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                z-index: 1000;
+                background: rgba(0, 0, 0, 0.8);
+                padding: 15px;
+                border-radius: 8px;
+                border: 1px solid #333;
+            }
+
+            .controls h3 {
+                margin: 0 0 10px 0;
+                font-size: 14px;
+            }
+
+            .control-group {
+                margin-bottom: 10px;
+            }
+
+            .control-group label {
+                display: block;
+                margin-bottom: 5px;
+                font-size: 12px;
+            }
+
+            .control-group input[type="file"] {
+                width: 200px;
+                font-size: 11px;
+            }
+
+            .video-list {
+                max-height: 200px;
+                overflow-y: auto;
+                border: 1px solid #555;
+                border-radius: 4px;
+                background: rgba(0, 0, 0, 0.5);
+                margin-top: 5px;
+            }
+
+            .video-item {
+                padding: 8px;
+                border-bottom: 1px solid #333;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 11px;
+            }
+
+            .video-item:last-child {
+                border-bottom: none;
+            }
+
+            .video-item:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .video-item.selected {
+                background: rgba(0, 150, 255, 0.3);
+                border-left: 3px solid #0096ff;
+            }
+
+            .video-item-name {
+                flex-grow: 1;
+                margin-right: 10px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: flex;
+                align-items: center;
+            }
+
+            .video-color-indicator {
+                display: inline-block;
+                margin-right: 8px;
+            }
+
+            .video-item-controls {
+                display: flex;
+                gap: 2px;
+                flex-shrink: 0;
+            }
+
+            .video-item button {
+                background: #555;
+                color: white;
+                border: none;
+                padding: 2px 4px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 9px;
+                min-width: 16px;
+            }
+
+            .video-item button:hover {
+                background: #777;
+            }
+
+            .video-item button:disabled {
+                background: #444;
+                color: #666;
+                cursor: not-allowed;
+            }
+
+            .video-item button.delete {
+                background: #cc4444;
+            }
+
+            .video-item button.delete:hover {
+                background: #ee6666;
+            }
+
+            .control-group button {
+                background: #333;
+                color: white;
+                border: 1px solid #555;
+                padding: 8px 12px;
+                margin: 2px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+            }
+
+            .control-group button:hover {
+                background: #555;
+            }
+
+            .instructions {
+                position: fixed;
+                bottom: 10px;
+                left: 10px;
+                z-index: 1000;
+                background: rgba(0, 0, 0, 0.8);
+                padding: 10px;
+                border-radius: 8px;
+                border: 1px solid #333;
+                font-size: 11px;
+                line-height: 1.4;
+            }
+        </style>
+        <meta charset="utf-8" />
+        <title>Video Mapper with Corner Handles</title>
+    </head>
+
+    <body>
+        <div class="controls">
+            <h3>Video Mapper Controls</h3>
+
+            <div class="control-group">
+                <label for="videoFile">Add Video:</label>
+                <input type="file" id="videoFile" accept="video/*" />
+                <div class="video-list" id="videoList">
+                    <div style="padding: 8px; text-align: center; color: #888; font-style: italic">No videos loaded</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button onclick="toggleCalibration()">Toggle Calibration (C)</button>
+            </div>
+
+            <div class="control-group">
+                <button onclick="toggleFullscreen()">Fullscreen (F)</button>
+            </div>
+
+            <div class="control-group">
+                <button onclick="toggleKioskMode()">Kiosk Mode (K)</button>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <strong>Instructions:</strong><br />
+            • Add video files using the file input<br />
+            • Click on a video in the list to select it<br />
+            • Press 'C' or click "Toggle Calibration" to show corner handles<br />
+            • Only the selected video shows corner handles<br />
+            • Drag the corner handles to position and reshape the video<br />
+            • Press 'M' to mute, 'H' to hide, 'K' for kiosk mode<br />
+            • Press 'W/S' to reorder selected video<br />
+            • Press 'F' for fullscreen, 'R' to reset mapping
+        </div>
+
+        <script src="sketch.js"></script>
+    </body>
+</html>
