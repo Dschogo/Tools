@@ -7,6 +7,7 @@
 let pMapper;
 let videos = []; // Array to store multiple video objects
 let selectedVideoIndex = -1; // Index of currently selected video
+let selectedControlPointIndex = -1; // Index of currently selected control point (-1 means none selected)
 let isCalibrating = false;
 let kioskMode = false; // Toggle for hiding UI
 
@@ -251,6 +252,7 @@ function addVideoFile(file) {
 function selectVideo(index) {
     if (index >= 0 && index < videos.length) {
         selectedVideoIndex = index;
+        selectedControlPointIndex = -1; // Clear selected control point when switching videos
         console.log(`Selected video: ${videos[index].name}`);
         updateVideoListUI();
     }
@@ -500,6 +502,9 @@ function resetQuadPosition(quadMap, video) {
 function toggleCalibration() {
     pMapper.toggleCalibration();
     isCalibrating = !isCalibrating;
+    if (!isCalibrating) {
+        selectedControlPointIndex = -1; // Clear selected control point when calibration is turned off
+    }
     console.log(`Calibration mode: ${isCalibrating ? "ON" : "OFF"}`);
 }
 
@@ -597,6 +602,30 @@ function mouseWheel(event) {
 
 // Keyboard controls
 function keyPressed() {
+    // Handle arrow keys for moving selected control point
+    if (selectedControlPointIndex >= 0 && selectedVideoIndex >= 0 && videos[selectedVideoIndex] && isCalibrating) {
+        const videoObj = videos[selectedVideoIndex];
+        const controlPoints = videoObj.quadMap.controlPoints;
+        
+        if (keyCode === UP_ARROW) {
+            controlPoints[selectedControlPointIndex].y -= 1;
+            console.log(`Moved control point ${selectedControlPointIndex} up by 1 pixel`);
+            return false; // Prevent default behavior
+        } else if (keyCode === DOWN_ARROW) {
+            controlPoints[selectedControlPointIndex].y += 1;
+            console.log(`Moved control point ${selectedControlPointIndex} down by 1 pixel`);
+            return false;
+        } else if (keyCode === LEFT_ARROW) {
+            controlPoints[selectedControlPointIndex].x -= 1;
+            console.log(`Moved control point ${selectedControlPointIndex} left by 1 pixel`);
+            return false;
+        } else if (keyCode === RIGHT_ARROW) {
+            controlPoints[selectedControlPointIndex].x += 1;
+            console.log(`Moved control point ${selectedControlPointIndex} right by 1 pixel`);
+            return false;
+        }
+    }
+    
     switch (key.toLowerCase()) {
         case "c":
             toggleCalibration();
@@ -648,13 +677,55 @@ function keyPressed() {
                 scaleSelectedQuad(0.9);
             }
             break;
+        case "escape": // Deselect control point
+            selectedControlPointIndex = -1;
+            console.log("Deselected control point");
+            break;
     }
 }
 
 // Mouse controls
 function mousePressed() {
-    if (isCalibrating) {
-        // In calibration mode, check which video was clicked
+    if (isCalibrating && selectedVideoIndex >= 0 && videos[selectedVideoIndex] && !videos[selectedVideoIndex].isHidden) {
+        const videoObj = videos[selectedVideoIndex];
+        const controlPoints = videoObj.quadMap.controlPoints;
+        const quadOffsetX = videoObj.quadMap.x || 0;
+        const quadOffsetY = videoObj.quadMap.y || 0;
+        
+        // Calculate mouse position relative to canvas
+        const mouseXCanvas = mouseX - width/2;
+        const mouseYCanvas = mouseY - height/2;
+        
+        // Check if mouse clicked on any control point of the selected video
+        let clickedControlPoint = -1;
+        for (let i = 0; i < controlPoints.length; i++) {
+            const point = controlPoints[i];
+            const adjustedX = point.x + quadOffsetX;
+            const adjustedY = point.y + quadOffsetY;
+            const distance = dist(mouseXCanvas, mouseYCanvas, adjustedX, adjustedY);
+            if (distance < 12) { // Click radius
+                clickedControlPoint = i;
+                break;
+            }
+        }
+        
+        if (clickedControlPoint >= 0) {
+            // Select the control point
+            selectedControlPointIndex = clickedControlPoint;
+            console.log(`Selected control point ${clickedControlPoint} of video: ${videoObj.name}`);
+        } else {
+            // Clicked somewhere else, deselect control point
+            selectedControlPointIndex = -1;
+            
+            // Check if mouse is over the video quad to select it
+            if (videoObj.quadMap.isMouseOver && videoObj.quadMap.isMouseOver()) {
+                selectVideo(selectedVideoIndex); // Refresh selection
+            }
+        }
+    } else if (isCalibrating) {
+        // No video selected, check which video was clicked
+        selectedControlPointIndex = -1; // Clear any selected control point
+        
         // Check from top to bottom (reverse order since last rendered is on top)
         for (let i = videos.length - 1; i >= 0; i--) {
             const videoObj = videos[i];
@@ -766,45 +837,51 @@ function drawCustomControlPoints(videoObj) {
     for (let i = 0; i < controlPoints.length; i++) {
         const point = controlPoints[i];
         const isThisHovered = (i === hoveredIndex);
+        const isThisSelected = (i === selectedControlPointIndex);
         const adjustedX = point.x + quadOffsetX;
         const adjustedY = point.y + quadOffsetY;
         
+        // Determine size and appearance based on state
+        let size = 16;
+        let strokeColor = color(255);
+        let strokeWt = 2;
+        
+        if (isThisSelected) {
+            size = 24;
+            strokeColor = color(255, 255, 0); // Yellow border for selected
+            strokeWt = 4;
+        } else if (isThisHovered) {
+            size = 20;
+            strokeWt = 3;
+        }
+        
         // Outer circle (main control point)
         fill(videoObj.color);
-        stroke(255);
-        strokeWeight(isThisHovered ? 3 : 2);
-        circle(adjustedX, adjustedY, isThisHovered ? 20 : 16);
+        stroke(strokeColor);
+        strokeWeight(strokeWt);
+        circle(adjustedX, adjustedY, size);
         
         // Inner circle for better visibility
         fill(255);
         noStroke();
-        circle(adjustedX, adjustedY, isThisHovered ? 10 : 8);
+        circle(adjustedX, adjustedY, size * 0.5);
         
         // Add a small center dot
-        fill(videoObj.color);
-        circle(adjustedX, adjustedY, 3);
-    }
-    
-    // If hovering, show which corner this is
-    if (isHovering && hoveredIndex >= 0) {
-        const point = controlPoints[hoveredIndex];
-        const adjustedX = point.x + quadOffsetX;
-        const adjustedY = point.y + quadOffsetY;
-        const cornerNames = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
+        fill(isThisSelected ? color(255, 255, 0) : videoObj.color);
+        circle(adjustedX, adjustedY, 4);
         
-        // Draw label background
-        fill(0, 0, 0, 180);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(12);
-        const labelWidth = textWidth(cornerNames[hoveredIndex]) + 10;
-        rect(adjustedX - labelWidth/2, adjustedY - 35, labelWidth, 18, 4);
-        
-        // Draw label text
-        fill(255);
-        text(cornerNames[hoveredIndex], adjustedX, adjustedY - 26);
+        // Add selection indicator (pulsing ring for selected point)
+        if (isThisSelected) {
+            push();
+            stroke(255, 255, 0, 150);
+            strokeWeight(2);
+            noFill();
+            let pulseSize = size + 8 + sin(millis() * 0.01) * 4; // Pulsing effect
+            circle(adjustedX, adjustedY, pulseSize);
+            pop();
+        }
     }
-    
+
     // Restore drawing state
     pop();
 }
