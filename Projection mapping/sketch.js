@@ -24,17 +24,29 @@ let kioskMode = false; // Toggle for hiding UI
 // }
 
 function setup() {
-    createCanvas(windowWidth, windowHeight, WEBGL);
+    // Create a larger virtual canvas to support 8K videos
+    // Use the maximum of current screen size and 8K dimensions
+    const canvasWidth = Math.max(windowWidth, 3840 * 2); // 8K width
+    const canvasHeight = Math.max(windowHeight, 2160 * 2); // 8K height
 
-    pMapper = createProjectionMapper(this);
+    createCanvas(canvasWidth, canvasHeight, WEBGL);
+
+    // Create projection mapper with explicit buffer size for 8K support
+    pMapper = createProjectionMapper(this, 3840 * 2, 2160 * 2);
 
     // Start calibration mode by default so user can see the handles
     pMapper.startCalibration();
     isCalibrating = true;
 
     console.log("Multi-Video Mapper initialized. Add video files to begin.");
+    console.log(`Canvas size: ${canvasWidth}x${canvasHeight} (supports up to 4K videos)`);
 }
 
+function windowResized() {
+    // Maintain 4K support even when window is resized
+    resizeCanvas(canvasWidth, canvasHeight);
+    // Don't auto-reset position on resize to preserve user's mapping
+}
 function draw() {
     background(0);
 
@@ -49,6 +61,17 @@ function draw() {
 
     // Update mapper events for interaction
     pMapper.updateEvents();
+    
+    // Completely override any library control point rendering
+    if (pMapper.surfaces) {
+        pMapper.surfaces.forEach(surface => {
+            if (surface.displayControlPoints) {
+                surface.displayControlPoints = function() {
+                    // Empty function to prevent library control points
+                };
+            }
+        });
+    }
 
     // Check which video is being interacted with and select it
     if (pMapper.selected && isCalibrating) {
@@ -73,16 +96,26 @@ function draw() {
     // Display control points only for the selected item
     if (isCalibrating && selectedVideoIndex >= 0 && videos[selectedVideoIndex] && !videos[selectedVideoIndex].isHidden) {
         const selectedObj = videos[selectedVideoIndex];
-        if (selectedObj.color) {
-            selectedObj.quadMap.controlPointColor = selectedObj.color;
-        }
-        selectedObj.quadMap.displayControlPoints();
+        
+        // Hide the library's control points by making them transparent
+        selectedObj.quadMap.controlPointColor = color(0, 0, 0, 0);
+        
+        // Draw our custom control points instead
+        drawCustomControlPoints(selectedObj);
     }
-    // hide all other controlpoints
+    
+    // Hide all other control points completely
     for (let i = 0; i < videos.length; i++) {
         const obj = videos[i];
-        if (obj.quadMap && i !== selectedVideoIndex) {
+        if (obj.quadMap) {
             obj.quadMap.controlPointColor = color(0, 0, 0, 0);
+            // Also override hover colors and sizes if they exist
+            if (obj.quadMap.controlPointHoverColor) {
+                obj.quadMap.controlPointHoverColor = color(0, 0, 0, 0);
+            }
+            if (obj.quadMap.controlPointSize !== undefined) {
+                obj.quadMap.controlPointSize = 0;
+            }
         }
     }
 }
@@ -110,6 +143,12 @@ function addImageFile(file) {
             const imageIndex = videos.length - 1;
             // Create quad map for this image
             imageObj.quadMap = pMapper.createQuadMap(img.width, img.height);
+            
+            // Completely override the library's control point rendering
+            imageObj.quadMap.displayControlPoints = function() {
+                // Empty function to prevent any library control points from showing
+            };
+            
             imageObj.quadMap.controlPointColor = imageObj.color;
             setTimeout(() => {
                 resetQuadPosition(imageObj.quadMap, img);
@@ -164,6 +203,13 @@ function addVideoFile(file) {
 
         // Create quad map for this video
         videoObj.quadMap = pMapper.createQuadMap(video.width, video.height);
+
+        // Completely override the library's control point rendering
+        videoObj.quadMap.displayControlPoints = function() {
+            // Empty function to prevent any library control points from showing
+        };
+
+        console.log(videoObj);
 
         // Set the color for the quad map's control points
         videoObj.quadMap.controlPointColor = videoObj.color;
@@ -373,9 +419,14 @@ function resetQuadPosition(quadMap, video) {
     let quadWidth = 300; // Default size
     let quadHeight = 200;
 
+    // Get actual viewport dimensions (visible browser window)
+    let viewportWidth = Math.min(windowWidth, window.innerWidth || document.documentElement.clientWidth);
+    let viewportHeight = Math.min(windowHeight, window.innerHeight || document.documentElement.clientHeight);
+
+    // If video dimensions are available, adjust quad size accordingly
     if (video && video.width > 0 && video.height > 0) {
-        // Calculate scale to fit nicely in window
-        const maxSize = Math.min(windowWidth, windowHeight) * 0.7; // 30% of smaller dimension
+        // Calculate scale to fit nicely in viewport
+        const maxSize = Math.min(viewportWidth, viewportHeight) * 0.7; // 30% of smaller viewport dimension
         const videoAspect = video.width / video.height;
 
         if (videoAspect > 1) {
@@ -391,15 +442,27 @@ function resetQuadPosition(quadMap, video) {
         scale = quadWidth / video.width;
     }
 
+    console.log("quadWidth:", quadWidth, "quadHeight:", quadHeight, "scale:", scale);
+    console.log("viewportWidth:", viewportWidth, "viewportHeight:", viewportHeight);
+    console.log("canvasWidth:", width, "canvasHeight:", height);
+
     // Add offset for multiple videos so they don't stack
     const videoIndex = videos.findIndex((v) => v.quadMap === quadMap);
     const offset = videoIndex * 50; // Larger offset for better separation
 
-    // Position quad corners in screen space (WEBGL coordinates with origin at center)
-    const left = -quadWidth / 2 + offset;
-    const right = quadWidth / 2 + offset;
-    const top = -quadHeight / 2 + offset;
-    const bottom = quadHeight / 2 + offset;
+    // Calculate viewport center position relative to full canvas
+    // In WEBGL, origin is at canvas center, so we need to offset to viewport center
+    const viewportCenterX = -(width / 2) + viewportWidth / 2; // Move from canvas center to viewport center
+    const viewportCenterY = -(height / 2) + viewportHeight / 2; // Move from canvas center to viewport center
+
+    // Position quad corners relative to viewport center
+    const left = viewportCenterX - quadWidth / 2 + offset;
+    const right = viewportCenterX + quadWidth / 2 + offset;
+    const top = viewportCenterY - quadHeight / 2 + offset;
+    const bottom = viewportCenterY + quadHeight / 2 + offset;
+
+    console.log("Positioning quad at viewport center:", viewportCenterX, viewportCenterY);
+    console.log("Quad bounds:", left, top, right, bottom);
 
     // Set the four corners of the quad with explicit coordinate assignment
     if (quadMap.controlPoints && quadMap.controlPoints.length >= 4) {
@@ -409,6 +472,7 @@ function resetQuadPosition(quadMap, video) {
                 console.error(`Anchor ${i} is null or undefined`);
                 return;
             }
+            // disable controlpoints for now
         });
 
         quadMap.controlPoints[0].x = left; // Top-left
@@ -419,6 +483,8 @@ function resetQuadPosition(quadMap, video) {
         quadMap.controlPoints[2].y = bottom;
         quadMap.controlPoints[3].x = left; // Bottom-left
         quadMap.controlPoints[3].y = bottom;
+
+
     } else {
         console.error("QuadMap anchors not properly initialized");
     }
@@ -605,11 +671,6 @@ function resetMapping() {
     }
 }
 
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    // Don't auto-reset position on resize to preserve user's mapping
-}
-
 // Global functions for UI controls
 window.toggleCalibration = toggleCalibration;
 window.togglePlayback = togglePlayback;
@@ -648,21 +709,95 @@ window.addFile = function () {
     fileInput.click();
 };
 
-// function setupVideoFileInput() {
-//     const fileInput = document.getElementById("videoFile");
-//     fileInput.setAttribute("accept", "video/*,image/*"); // Accept both video and image
-//     fileInput.addEventListener("change", function (event) {
-//         const file = event.target.files[0];
-//         if (file) {
-//             if (file.type.startsWith("video/")) {
-//                 addVideoFile(file);
-//             } else if (file.type.startsWith("image/")) {
-//                 addImageFile(file);
-//             } else {
-//                 alert("Unsupported file type. Please select a video or image file.");
-//             }
-//             // Clear the input so the same file can be added again if needed
-//             fileInput.value = "";
-//         }
-//     });
-// }
+// Custom control point rendering that uses quadMap x,y offsets for body movement
+function drawCustomControlPoints(videoObj) {
+    if (!videoObj.quadMap || !videoObj.quadMap.controlPoints) return;
+    
+    const controlPoints = videoObj.quadMap.controlPoints;
+    const quadMap = videoObj.quadMap;
+    
+    // Get the quad's offset position (this updates when the whole quad is moved)
+    const quadOffsetX = quadMap.x || 0;
+    const quadOffsetY = quadMap.y || 0;
+    
+    // Save current drawing state
+    push();
+    
+    // Check if any control point is being hovered or dragged
+    let isHovering = false;
+    let hoveredIndex = -1;
+    
+    // Calculate mouse position relative to canvas
+    const mouseXCanvas = mouseX - width/2;
+    const mouseYCanvas = mouseY - height/2;
+    
+    // Check for hover on control points (adjusted for quad offset)
+    for (let i = 0; i < controlPoints.length; i++) {
+        const point = controlPoints[i];
+        const adjustedX = point.x + quadOffsetX;
+        const adjustedY = point.y + quadOffsetY;
+        const distance = dist(mouseXCanvas, mouseYCanvas, adjustedX, adjustedY);
+        if (distance < 12) { // Hover radius
+            isHovering = true;
+            hoveredIndex = i;
+            break;
+        }
+    }
+    
+    // Draw connecting lines between control points to show quad shape
+    stroke(videoObj.color);
+    strokeWeight(isHovering ? 2 : 1);
+    noFill();
+    beginShape();
+    for (let i = 0; i < controlPoints.length; i++) {
+        const point = controlPoints[i];
+        vertex(point.x + quadOffsetX, point.y + quadOffsetY);
+    }
+    endShape(CLOSE);
+    
+    // Draw control points at their adjusted positions
+    for (let i = 0; i < controlPoints.length; i++) {
+        const point = controlPoints[i];
+        const isThisHovered = (i === hoveredIndex);
+        const adjustedX = point.x + quadOffsetX;
+        const adjustedY = point.y + quadOffsetY;
+        
+        // Outer circle (main control point)
+        fill(videoObj.color);
+        stroke(255);
+        strokeWeight(isThisHovered ? 3 : 2);
+        circle(adjustedX, adjustedY, isThisHovered ? 20 : 16);
+        
+        // Inner circle for better visibility
+        fill(255);
+        noStroke();
+        circle(adjustedX, adjustedY, isThisHovered ? 10 : 8);
+        
+        // Add a small center dot
+        fill(videoObj.color);
+        circle(adjustedX, adjustedY, 3);
+    }
+    
+    // If hovering, show which corner this is
+    if (isHovering && hoveredIndex >= 0) {
+        const point = controlPoints[hoveredIndex];
+        const adjustedX = point.x + quadOffsetX;
+        const adjustedY = point.y + quadOffsetY;
+        const cornerNames = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
+        
+        // Draw label background
+        fill(0, 0, 0, 180);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(12);
+        const labelWidth = textWidth(cornerNames[hoveredIndex]) + 10;
+        rect(adjustedX - labelWidth/2, adjustedY - 35, labelWidth, 18, 4);
+        
+        // Draw label text
+        fill(255);
+        text(cornerNames[hoveredIndex], adjustedX, adjustedY - 26);
+    }
+    
+    // Restore drawing state
+    pop();
+}
