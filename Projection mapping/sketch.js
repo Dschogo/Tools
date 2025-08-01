@@ -191,6 +191,8 @@ function addVideoFile(file) {
         isMuted: false,
         isHidden: false,
         color: videoColor,
+        metadataHandler: null, // Will store reference to metadata event handler
+        errorHandler: null,    // Will store reference to error event handler
     };
 
     // Add to videos array
@@ -198,7 +200,7 @@ function addVideoFile(file) {
     const videoIndex = videos.length - 1;
 
     // Wait for video metadata to load
-    video.elt.addEventListener("loadedmetadata", function () {
+    videoObj.metadataHandler = function () {
         console.log(`Video loaded: ${file.name} (${video.width}x${video.height})`);
 
         // Create quad map for this video
@@ -230,9 +232,10 @@ function addVideoFile(file) {
 
             console.log("Video ready! Click to play or use controls.");
         }, 10); // Small delay to ensure proper initialization
-    });
+    };
+    video.elt.addEventListener("loadedmetadata", videoObj.metadataHandler);
 
-    video.elt.addEventListener("error", function (e) {
+    videoObj.errorHandler = function (e) {
         console.error("Error loading video:", e);
         alert("Error loading video file. Please try a different format.");
         // Remove the failed video from the array
@@ -241,7 +244,8 @@ function addVideoFile(file) {
             videos.splice(index, 1);
             updateVideoListUI();
         }
-    });
+    };
+    video.elt.addEventListener("error", videoObj.errorHandler);
 }
 
 function selectVideo(index) {
@@ -346,6 +350,9 @@ function deleteVideo(index) {
 
         // Clean up video resources
         if (videoObj.video) {
+            // Remove event listeners before destroying the video to prevent error events
+            videoObj.video.elt.removeEventListener("error", videoObj.errorHandler);
+            videoObj.video.elt.removeEventListener("loadedmetadata", videoObj.metadataHandler);
             videoObj.video.remove();
         }
         if (videoObj.url) {
